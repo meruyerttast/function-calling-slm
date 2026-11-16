@@ -1,0 +1,2 @@
+Rank,Model,Agentic Overall Acc,Web Search Summary,Web Search Base,Web Search No Snippet,Memory Summary,Memory KV,Memory Vector,Memory Recursive Summarization
+1,Qwen2.5-3B-Instruct (FC),4.84%,0.00%,0.00%,0.00%,9.68%,4.52%,1.94%,22.58%

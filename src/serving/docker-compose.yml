@@ -1,0 +1,21 @@
+services:
+  vllm:
+    build: .
+    image: info290-serving
+    ports:
+      - "${PORT:-8000}:${PORT:-8000}"
+    environment:
+      MODEL_NAME: ${MODEL_NAME:-Qwen/Qwen2.5-3B-Instruct}
+      ADAPTER_REPO: ${ADAPTER_REPO:-}
+      MAX_LORA_RANK: ${MAX_LORA_RANK:-64}
+      MAX_MODEL_LEN: ${MAX_MODEL_LEN:-4096}
+      HF_TOKEN: ${HF_TOKEN:-}
+      PORT: ${PORT:-8000}
+      HOST: ${HOST:-0.0.0.0}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

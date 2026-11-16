@@ -1,0 +1,242 @@
+% Pushing the Sub-3B Frontier for Function-Calling SLMs
+% INFO 290 final presentation, ~10-15 minutes, 11 frames.
+% Compile: `make` (runs pdflatex twice). See README.md for details.
+
+\documentclass[aspectratio=169,11pt]{beamer}
+
+% Theme: prefer metropolis if available (clean, modern). Comment the
+% \usetheme{metropolis} line and uncomment the default block below if
+% your TeX install does not have the metropolis package.
+\usetheme{metropolis}
+% \usetheme{default}
+% \usecolortheme{seahorse}
+
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{booktabs}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{hyperref}
+
+\definecolor{tbd}{HTML}{C04040}
+\definecolor{accent}{HTML}{2D5BFF}
+\definecolor{ink}{HTML}{141210}
+\definecolor{dimgray}{HTML}{666666}
+
+\newcommand{\todo}[1]{{\color{tbd}\textsf{[TODO: #1]}}}
+\newcommand{\tbd}{{\color{tbd}--}}
+
+\lstset{
+  basicstyle=\ttfamily\scriptsize,
+  breaklines=true,
+  columns=fullflexible,
+  keepspaces=true,
+  showstringspaces=false,
+  frame=single,
+  framerule=0.4pt,
+  rulecolor=\color{dimgray},
+  xleftmargin=4pt,
+  xrightmargin=4pt,
+}
+
+\title{Pushing the Sub-3B Frontier for Function-Calling SLMs}
+\subtitle{Cold-start GRPO, Function Masking, and Curriculum on Qwen2.5-3B}
+\author{Arnur Sabet \and Assel Sakenkyzy \and Diara Bagayeva \and Meruyert Tastybay}
+\institute{INFO 290: Fundamentals of Generative AI \\ UC Berkeley, Spring 2026}
+\date{April 30, 2026}
+
+\begin{document}
+
+% ---------------------------------------------------------------------
+\begin{frame}
+  \titlepage
+\end{frame}
+
+% ---------------------------------------------------------------------
+\begin{frame}{The Problem}
+  \begin{itemize}
+    \item Function calling is the bridge from LLMs to real-world tool use: APIs, agents, on-device assistants.
+    \item Frontier models (GPT-4o, Claude) handle it well, but they are too large and too expensive to run locally.
+    \item Sub-3B models trail by a wide margin on the Berkeley Function Calling Leaderboard (BFCL).
+    \item The gap matters most where it is hardest to close: phones, laptops, free-tier Colab, classrooms.
+  \end{itemize}
+  \vspace{6pt}
+  {\small\color{dimgray} Goal: push Qwen2.5-3B-Instruct (Apache 2.0) closer to the frontier on BFCL V4 without crossing the 3B parameter line.}
+\end{frame}
+
+% ---------------------------------------------------------------------
+\begin{frame}{Approach}
+  \textbf{Three levers, all applied to Qwen2.5-3B-Instruct.}
+  \begin{itemize}
+    \item \textbf{Cold-start GRPO.} Skip SFT warm-up before RL. Following ToolRL\footnote{\href{https://arxiv.org/abs/2504.13958}{arXiv:2504.13958}}, supervised warm-up at small scale memorizes traces and limits exploration.
+    \item \textbf{Hammer-style function masking.} Replace 67\% of function and parameter names with random identifiers so the model learns to read tool descriptions, not memorize names.\footnote{\href{https://arxiv.org/abs/2410.04587}{Hammer 2.1, arXiv:2410.04587}}
+    \item \textbf{Single-call to parallel-call curriculum.} Stage easier examples first, scale to harder.
+  \end{itemize}
+  \vspace{4pt}
+  {\small\color{dimgray} Stack: QLoRA rank 64 + NF4 quantization, paged AdamW 8-bit, TRL SFTTrainer / GRPOTrainer.}
+\end{frame}
+
+% ---------------------------------------------------------------------
+\begin{frame}{Data: xLAM-60k to a 4K Curated Subset}
+  \textbf{Source.} Salesforce \texttt{xLAM-function-calling-60k} (CC-BY-4.0)\footnote{\href{https://huggingface.co/datasets/Salesforce/xlam-function-calling-60k}{HF: Salesforce/xlam-function-calling-60k}}: 60{,}264 query / tool-set / call triples. Roughly 47\% single-call, 53\% parallel-call, 0\% no-call.
+  \vspace{4pt}
+
+  \textbf{Four-stage filter to 4{,}000 examples:}
+  \begin{enumerate}
+    \item \textbf{Validation.} Drop malformed JSON, missing fields, calls referencing unknown tools.
+    \item \textbf{Deduplication.} Case-insensitive exact-match dedupe on query text.
+    \item \textbf{Balanced sampling.} Target 60 / 30 / 10 (single / parallel / no-call). xLAM has zero no-call, so final mix is 64.7\% single, 35.3\% parallel.
+    \item \textbf{Diversity scoring.} Within each bucket, rank by parameter-type diversity (string, int, float, bool, array).
+  \end{enumerate}
+  \vspace{4pt}
+  {\small\color{dimgray} The empty no-call slot is a known limitation; see slide on Limitations.}
+\end{frame}
+
+% ---------------------------------------------------------------------
+\begin{frame}[fragile]{Function Masking: Before / After}
+  Mask 67\% of training examples (2{,}680 masked / 1{,}320 unmasked). Function names, parameter names, and default values get random identifiers.
+  \vspace{4pt}
+
+  \textbf{Before (raw xLAM):}
+\begin{lstlisting}
+{
+  "name": "get_weather",
+  "parameters": {
+    "city": {"type": "string"},
+    "units": {"type": "string", "default": "celsius"}
+  }
+}
+\end{lstlisting}
+
+  \textbf{After (masked):}
+\begin{lstlisting}
+{
+  "name": "k7q3xz",
+  "parameters": {
+    "p2vrm9": {"type": "string"},
+    "ab8ftc": {"type": "string", "default": "rW82"}
+  }
+}
+\end{lstlisting}
+
+  {\small\color{dimgray} The model is forced to read the natural-language tool description, not pattern-match on \texttt{get\_weather}.}
+\end{frame}
+
+% ---------------------------------------------------------------------
+\begin{frame}{System Variants}
+  \begin{table}
+    \centering
+    \small
+    \begin{tabular}{cll}
+      \toprule
+      \textbf{ID} & \textbf{Variant} & \textbf{Notes} \\
+      \midrule
+      V1 & Base, zero-shot                  & Untuned Qwen2.5-3B-Instruct ceiling \\
+      V2 & SFT, unmasked                    & Supervised on 4K curated, 3 epochs \\
+      V3 & SFT, masked                      & V2 + 67\% function masking \\
+      V4 & GRPO cold-start, unmasked        & RL from base, no SFT warm-up \\
+      V5 & GRPO cold-start, masked          & V4 + masking \\
+      V6 & GRPO + masking + curriculum      & Stretch goal: single $\rightarrow$ parallel ordering \\
+      \bottomrule
+    \end{tabular}
+  \end{table}
+  \vspace{4pt}
+  {\small\color{dimgray} All variants share the same base model, BFCL V4 release \texttt{2026.3.23}, and decoding config (\texttt{temperature=0}, \texttt{max\_tokens=512}).}
+\end{frame}
+
+% ---------------------------------------------------------------------
+\begin{frame}{Results: BFCL V4 Non-Live}
+  \begin{table}
+    \centering
+    \scriptsize
+    \begin{tabular}{lcccccc}
+      \toprule
+      \textbf{Variant} & \textbf{Overall} & \textbf{Simple} & \textbf{Multiple} & \textbf{Parallel} & \textbf{Par.-Mult.} & \textbf{Irrelevance} \\
+      \midrule
+      V1 Base               & 79.67\% & 73.67\% & 90.50\% & 76.00\% & 78.50\% & 58.75\% \\
+      V2 SFT                & \tbd & \tbd & \tbd & \tbd & \tbd & \tbd \\
+      V3 SFT+Mask           & \tbd & \tbd & \tbd & \tbd & \tbd & \tbd \\
+      V4 GRPO cold          & \tbd & \tbd & \tbd & \tbd & \tbd & \tbd \\
+      V5 GRPO+Mask          & \tbd & \tbd & \tbd & \tbd & \tbd & \tbd \\
+      V6 Full recipe        & \tbd & \tbd & \tbd & \tbd & \tbd & \tbd \\
+      \bottomrule
+    \end{tabular}
+  \end{table}
+  \vspace{4pt}
+  \textbf{Reading V1.} Strong on \emph{Multiple} (90.5\%), weak on \emph{Irrelevance} (58.75\%): the base model is fluent at picking among given tools but refuses poorly when no tool fits.
+  \vspace{2pt}
+
+  {\small V1 Simple breaks down: Python 95\%, Java 62\%, JavaScript 64\%. Tokenization / syntax-family transfer is the visible gap.}
+  \vspace{2pt}
+
+  \todo{Fill V2-V5 rows once final BFCL runs land. See README.md for the swap-in procedure.}
+\end{frame}
+
+% ---------------------------------------------------------------------
+\begin{frame}{Results: V4-Weighted Overall}
+  \begin{table}
+    \centering
+    \scriptsize
+    \begin{tabular}{lcccccc}
+      \toprule
+      \textbf{Variant} & \textbf{Non-Live} & \textbf{Live} & \textbf{Halluc.} & \textbf{Multi-Turn} & \textbf{Agentic} & \textbf{Overall V4} \\
+      \midrule
+      V1 Base               & 79.67\% & \tbd & \tbd & \tbd & \tbd & \tbd \\
+      V2 SFT                & \tbd & \tbd & \tbd & \tbd & \tbd & \tbd \\
+      V3 SFT+Mask           & \tbd & \tbd & \tbd & \tbd & \tbd & \tbd \\
+      V4 GRPO cold          & \tbd & \tbd & \tbd & \tbd & \tbd & \tbd \\
+      V5 GRPO+Mask          & \tbd & \tbd & \tbd & \tbd & \tbd & \tbd \\
+      V6 Full recipe        & \tbd & \tbd & \tbd & \tbd & \tbd & \tbd \\
+      \bottomrule
+    \end{tabular}
+  \end{table}
+  \vspace{2pt}
+  {\small\color{dimgray} V4 weights: Agentic 40\% / Multi-Turn 30\% / Live 10\% / Non-Live 10\% / Hallucination 10\%.}
+  \vspace{6pt}
+
+  \todo{Once trained-variant numbers land, summarize: which variant tops Overall V4? Did masking help generalization (V2 vs V3)? Did GRPO beat SFT (V2 vs V4)?}
+\end{frame}
+
+% ---------------------------------------------------------------------
+\begin{frame}{Systems Contributions: Three bfcl-eval Patches}
+  Validating end-to-end on Colab T4 surfaced three reproducibility bugs in upstream \texttt{bfcl-eval}. All fixed in our fork\footnote{\href{https://github.com/arnursabet/gorilla/tree/qwen-2.5-3b-handler-t4-support}{arnursabet/gorilla @ qwen-2.5-3b-handler-t4-support, commit \texttt{f64471b}}}.
+  \vspace{4pt}
+  \begin{enumerate}
+    \item \textbf{Silent dtype kwarg.} \texttt{QwenFCHandler.\_\_init\_\_} declared a \texttt{dtype} kwarg but never forwarded it to \texttt{super().\_\_init\_\_()}. Parent's \texttt{bfloat16} default always won; T4 (CC 7.5) has no bf16 support, so every run silently failed. Fix: forward the kwarg.
+    \item \textbf{Hardcoded vLLM args.} \texttt{base\_oss\_handler} built \texttt{vllm serve} with no knob for \texttt{--max-num-seqs} / \texttt{--max-model-len}. Default \texttt{max\_num\_seqs=256} OOMs on a 15\,GB T4. Fix: env vars (\texttt{BFCL\_VLLM\_MAX\_NUM\_SEQS}, \texttt{BFCL\_VLLM\_MAX\_MODEL\_LEN}).
+    \item \textbf{Context-length desync.} \texttt{leftover\_tokens\_count} was capped at 4{,}096, oblivious to the actual server \texttt{--max-model-len}. Fix: shrink \texttt{self.max\_context\_length} to match the env var when set.
+  \end{enumerate}
+  \vspace{2pt}
+  {\small\color{dimgray} Non-breaking on A100/H100. Lowers the bar for free-tier classroom replication.}
+\end{frame}
+
+% ---------------------------------------------------------------------
+\begin{frame}{Limitations and Future Work}
+  \textbf{Limitations.}
+  \begin{itemize}
+    \item \textbf{Training set size.} 4K examples is roughly an order of magnitude smaller than xLAM-2 / Hammer 2.1. Likely underfits the long tail.
+    \item \textbf{Adapter capacity.} Rank-64 QLoRA on NF4 keeps trainable params under 5\%. Caps expressivity, especially on Multi-Turn.
+    \item \textbf{No-call synthesis did not ship.} 400-example refusal-training stage was scoped but unimplemented. Hallucination gains depend on emergent generalization.
+    \item \textbf{Agentic bucket may be incomplete.} Requires Serper API credits. We may report Non-Live, Live, Hallucination, Multi-Turn separately if Agentic is missing.
+  \end{itemize}
+
+  \textbf{Future work.} No-call synthesis, then a rank-128 ablation, then a budgeted Agentic run for fully comparable V4 overall.
+\end{frame}
+
+% ---------------------------------------------------------------------
+\begin{frame}{Thank You}
+  \begin{center}
+    \Large Questions?
+  \end{center}
+  \vspace{6pt}
+  \begin{itemize}
+    \item Code: \href{https://github.com/arnursabet/info290-function-calling-slm}{github.com/arnursabet/info290-function-calling-slm}
+    \item Patched eval fork: \href{https://github.com/arnursabet/gorilla/tree/qwen-2.5-3b-handler-t4-support}{arnursabet/gorilla @ qwen-2.5-3b-handler-t4-support}
+    \item References: \href{https://arxiv.org/abs/2406.18518}{xLAM (2406.18518)}, \href{https://arxiv.org/abs/2412.15115}{Qwen2.5 (2412.15115)}, \href{https://arxiv.org/abs/2305.14314}{QLoRA (2305.14314)}, \href{https://arxiv.org/abs/2402.03300}{GRPO / DeepSeekMath (2402.03300)}, \href{https://arxiv.org/abs/2410.04587}{Hammer 2.1 (2410.04587)}, \href{https://arxiv.org/abs/2504.13958}{ToolRL (2504.13958)}, \href{https://gorilla.cs.berkeley.edu/leaderboard.html}{BFCL leaderboard}.
+  \end{itemize}
+  \vspace{6pt}
+  {\small\color{dimgray} Arnur Sabet, Assel Sakenkyzy, Diara Bagayeva, Meruyert Tastybay. Equal contribution.}
+\end{frame}
+
+\end{document}

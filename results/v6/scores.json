@@ -1,0 +1,33 @@
+{
+  "variant": "v6",
+  "model": "Qwen/Qwen2.5-3B-Instruct",
+  "adapter": "arnursb/info290-v6-grpo-curriculum",
+  "bfcl_version": "2026.3.23",
+  "generation_config": {
+    "temperature": 0.0,
+    "top_p": 1.0,
+    "max_tokens": 512
+  },
+  "top_level": {
+    "non_live": 0.7954000000000001,
+    "live": 0.6779999999999999,
+    "hallucination": 0.6199,
+    "multi_turn": 0.0062,
+    "agentic": 0.05375
+  },
+  "weights": {
+    "agentic": 0.4,
+    "multi_turn": 0.3,
+    "live": 0.1,
+    "non_live": 0.1,
+    "hallucination": 0.1
+  },
+  "overall": 0.23269,
+  "side_metrics": {
+    "format_sensitivity_max_delta": null,
+    "format_sensitivity_std": null
+  },
+  "run_metadata": {
+    "timestamp": "2026-04-30T08:31:51.189999+00:00"
+  }
+}

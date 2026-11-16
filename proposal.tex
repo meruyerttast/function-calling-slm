@@ -1,0 +1,154 @@
+\documentclass[11pt, letterpaper]{article}
+
+\usepackage[margin=0.75in]{geometry}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{xcolor}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\setlength{\parskip}{6pt}
+\setlength{\parindent}{0pt}
+
+\definecolor{blue}{HTML}{2D5BFF}
+\definecolor{ink}{HTML}{141210}
+\definecolor{dimgray}{HTML}{666666}
+\definecolor{highlight}{HTML}{EEF1FF}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue,
+  urlcolor=blue,
+  citecolor=blue
+}
+
+\begin{document}
+
+\begin{center}
+  {\LARGE\bfseries Pushing the Sub-3B Frontier\\[4pt] for Function-Calling SLMs}\\[18pt]
+  {\large Arnur Sabet \quad Assel Sakenkyzy \quad Diara Bagayeva \quad Meruyert Tastybay}\\[4pt]
+  {\small\color{dimgray} sabet@berkeley.edu \quad assel\_sakenkyzy@berkeley.edu \quad diarabagayeva@berkeley.edu \quad meruyert\_tastybay@berkeley.edu}\\[6pt]
+  {\color{dimgray} INFO 290: Fundamentals of Generative AI, UC Berkeley, Spring 2026}\\[6pt]
+  {\color{dimgray}\small Repository: \url{https://github.com/arnursabet/info290-function-calling-slm}}
+\end{center}
+
+\vspace{6pt}
+\hrule
+\vspace{10pt}
+
+\section*{Motivation}
+
+Function calling is the core capability that separates chatbots from AI agents. When an agent needs to check the weather, book a flight, or query a database, it doesn't answer directly. Instead, it outputs a structured function call with the correct tool name and parameters. Today, reliable function calling requires large proprietary models like GPT-4, which cost roughly \$0.03 per call and introduce 1--2 seconds of latency. For agentic systems that make hundreds of tool calls per task, this adds up fast.
+
+Recent work has shown that small language models (SLMs) can be trained for function calling, but performance drops sharply below 7 billion parameters. On the Berkeley Function Calling Leaderboard (BFCL V4), sub-3B models score 20--40\% on complex multi-turn and agentic tasks, compared to 85\%+ for state-of-the-art 7B models. But real-world deployment (edge devices, browser-based agents, cost-sensitive applications at scale) often requires models much smaller than 7B.
+
+\section*{Project Type}
+
+Reinforcement learning for tool use, combined with data augmentation (function masking) and curriculum-based training. We fine-tune an existing open-source foundation model (Qwen2.5-3B-Instruct) and evaluate against established benchmarks.
+
+\section*{Approach}
+
+Our project combines three techniques from the 2025--2026 literature that have individually shown strong results but have never been combined at the sub-3B scale:
+
+\textbf{GRPO reinforcement learning} (from NVIDIA's Nemotron-Tool-N1 and ToolRL): Training with a binary reward signal (correct function call $= 1$, incorrect $= 0$) rather than supervised fine-tuning. Multiple papers show cold-start GRPO outperforms SFT and even SFT-then-RL pipelines, because SFT initialization can cause memorization that limits exploration.
+
+\textbf{Function masking} (from Hammer 2.1, ICLR 2025): During training, function names and parameter names are replaced with random strings. This forces the model to reason from natural language descriptions rather than memorizing naming conventions, improving generalization to unseen APIs.
+
+\textbf{Curriculum training} (inspired by ToolACE-R): Ordering training examples from simple single-turn calls to complex parallel and multi-turn scenarios, using model-aware difficulty scoring.
+
+\section*{System Variants}
+
+We train six variants on Qwen2.5-3B-Instruct, each adding one technique incrementally. This design isolates the contribution of each technique.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}clll@{}}
+\toprule
+\textbf{\#} & \textbf{Variant} & \textbf{Technique Added} & \textbf{Tests} \\
+\midrule
+1 & Base zero-shot & --- & Baseline \\
+2 & SFT only & Supervised fine-tuning & Standard approach \\
+3 & SFT + masking & + function name obfuscation & Masking effect \\
+4 & GRPO cold-start & RL with binary reward & SFT vs RL at 3B \\
+5 & GRPO + masking & RL + name obfuscation & RL + generalization \\
+6 & \textbf{Full recipe} & \textbf{RL + masking + curriculum} & \textbf{Best model} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section*{Training Pipeline}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}llll@{}}
+\toprule
+\textbf{Stage} & \textbf{Component} & \textbf{Tool} & \textbf{Output} \\
+\midrule
+Data & xLAM-60k curation & DVC & 4K filtered examples \\
+Data & Function masking & Custom scripts & Masked training set \\
+Data & Difficulty scoring & Model-aware scorer & Curriculum ordering \\
+\midrule
+Training & SFT (variants 2--3) & HuggingFace + QLoRA & Fine-tuned adapters \\
+Training & GRPO (variants 4--6) & TRL library & RL-trained adapters \\
+\midrule
+Eval & Benchmarking & BFCL V4 eval suite & Accuracy scores \\
+Eval & Latency/cost analysis & Custom profiler & Performance metrics \\
+\midrule
+Deploy & Inference server & vLLM + FastAPI & OpenAI-compatible API \\
+Deploy & Containerization & Docker & Deployable image \\
+Deploy & Model release & HuggingFace Hub & Public model card \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Training uses QLoRA for SFT variants and the TRL library's GRPO implementation for RL variants. GRPO uses a binary reward (correct call $= 1$, else $0$) with a format reward requiring proper XML tags. All experiments run on Google Colab Pro (A100 GPU).
+
+\section*{Evaluation}
+
+We evaluate all variants on BFCL V4, which weights agentic tasks (40\%), multi-turn (30\%), live scenarios (10\%), non-live (10\%), and hallucination detection (10\%).
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}llll@{}}
+\toprule
+\textbf{Model} & \textbf{Size} & \textbf{Method} & \textbf{BFCL Score} \\
+\midrule
+Qwen2.5-3B base & 3B & zero-shot & $\sim$52\% \\
+xLAM-2-3b-fc-r & 3B & SFT (APIGen) & $\sim$65\% \\
+Hammer2.1-3B & 3B & SFT + masking & $\sim$68\% \\
+\textbf{Ours (variant 6)} & \textbf{3B} & \textbf{GRPO + mask + curric.} & \textbf{70\%+ ?} \\
+\midrule
+\color{dimgray}RC-GRPO (reference) & \color{dimgray}7B & \color{dimgray}GRPO + reward cond. & \color{dimgray}85\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+We also measure latency (ms/call), throughput (calls/sec), and projected cost per 1M calls to quantify the practical deployment tradeoff against GPT-4.
+
+\section*{Deliverables}
+
+\begin{enumerate}
+  \item \textbf{Model:} Best-performing 3B function-calling model, published on HuggingFace with a model card
+  \item \textbf{API Server:} OpenAI-compatible inference endpoint (vLLM + FastAPI), containerized with Docker
+  \item \textbf{Pipeline:} Reproducible training pipeline on GitHub with DVC data versioning and W\&B experiment tracking
+  \item \textbf{CI/CD:} GitHub Actions workflow: lint, test, train, evaluate, gate on metrics, deploy
+\end{enumerate}
+
+\section*{Related Work}
+
+The most relevant prior work is NVIDIA's Nemotron-Research-Tool-N1 (May 2025), which demonstrated that pure GRPO outperforms SFT for function calling at 7B+ scale. RC-GRPO (February 2026) extended this with reward-conditioned training, achieving 85\% on BFCL V4 multi-turn with a 7B model, surpassing all closed-source models. Hammer 2.1 (ICLR 2025) introduced function masking and showed strong generalization at sizes from 0.5B to 7B, but used SFT rather than RL. Our project differs by combining GRPO with function masking at the 3B scale, which no existing work has attempted, and by adding curriculum-based training ordering.
+
+\section*{Data Sources}
+
+\begin{itemize}
+  \item \textbf{Training data:} xLAM-function-calling-60k (Salesforce, CC-BY-4.0)\\
+    \url{https://huggingface.co/datasets/Salesforce/xlam-function-calling-60k}
+  \item \textbf{Evaluation:} Berkeley Function Calling Leaderboard V4 (BFCL)\\
+    \url{https://gorilla.cs.berkeley.edu/leaderboard.html}
+  \item \textbf{Base model:} Qwen2.5-3B-Instruct (Apache 2.0)\\
+    \url{https://huggingface.co/Qwen/Qwen2.5-3B-Instruct}
+\end{itemize}
+
+\end{document}

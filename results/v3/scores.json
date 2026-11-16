@@ -1,0 +1,40 @@
+{
+  "variant": "v3",
+  "model": "Qwen/Qwen2.5-3B-Instruct",
+  "adapter": "arnursb/info290-v3-sft-masked",
+  "bfcl_version": "2026.3.23",
+  "generation_config": {
+    "temperature": 0.0,
+    "top_p": 1.0,
+    "max_tokens": 512
+  },
+  "top_level": {
+    "non_live": 0.8008,
+    "live": 0.6765000000000001,
+    "hallucination": 0.6247,
+    "multi_turn": 0.0062,
+    "agentic": 0.0484
+  },
+  "weights": {
+    "agentic": 0.4,
+    "multi_turn": 0.3,
+    "live": 0.1,
+    "non_live": 0.1,
+    "hallucination": 0.1
+  },
+  "overall": 0.23142000000000001,
+  "side_metrics": {
+    "format_sensitivity_max_delta": null,
+    "format_sensitivity_std": null
+  },
+  "run_metadata": {
+    "timestamp": "2026-04-30T02:44:39.985307+00:00",
+    "merged_with": [
+      "live",
+      "hallucination",
+      "multi_turn",
+      "agentic"
+    ],
+    "recomputed": "fix(eval): _coerce percent + hallucination re-read from CSV"
+  }
+}

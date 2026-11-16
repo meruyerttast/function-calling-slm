@@ -1,0 +1,61 @@
+# GRPO training configuration for Variants 4 and 5
+# Cold-start from base Qwen2.5-3B-Instruct (no SFT init), per ToolRL findings.
+#
+# Defaults target A100 (Colab Pro+) with bf16. On T4 fallback override:
+#   model.torch_dtype: "float16"
+#   quantization.bnb_4bit_compute_dtype: "float16"
+#   training.bf16: false
+#   training.fp16: true
+# Note: do NOT mix bf16 model dtype with fp16 training — GradScaler has no
+# bf16 kernel and crashes at the first optimizer step.
+
+model:
+  name: "Qwen/Qwen2.5-3B-Instruct"
+  torch_dtype: "bfloat16"
+  attn_implementation: "sdpa"
+
+quantization:
+  load_in_4bit: true
+  bnb_4bit_compute_dtype: "bfloat16"
+  bnb_4bit_quant_type: "nf4"
+
+lora:
+  rank: 64
+  alpha: 128
+  dropout: 0.05
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj
+
+grpo:
+  num_generations: 4
+  max_completion_length: 512
+  beta: 0.04
+  loss_type: "grpo"
+  scale_rewards: true
+  temperature: 0.7
+
+training:
+  learning_rate: 5.0e-7
+  num_train_epochs: 1
+  per_device_train_batch_size: 1
+  gradient_accumulation_steps: 4
+  warmup_ratio: 0.05
+  weight_decay: 0.01
+  max_grad_norm: 1.0
+  bf16: true
+  fp16: false
+  gradient_checkpointing: true
+  logging_steps: 10
+  save_steps: 100
+
+logging:
+  report_to: "wandb"
+  wandb_project: "info290-function-calling-slm"
+
+output_dir: "checkpoints/grpo"

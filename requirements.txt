@@ -1,0 +1,33 @@
+# Training
+transformers==5.2.0
+datasets==4.5.0
+trl==0.27.1
+peft==0.18.1
+accelerate
+bitsandbytes
+torch>=2.4.0
+
+# Experiment tracking
+wandb==0.25.0
+
+# Data versioning
+dvc==3.66.1
+
+# Serving (run separately, not in training notebook)
+# vllm==0.15.1
+# fastapi
+# uvicorn
+
+# Evaluation
+# BFCL V4 evaluation harness (Issue #5).
+# Installed from arnursabet/gorilla fork on branch qwen-2.5-3b-handler,
+# which adds Qwen/Qwen2.5-3B-Instruct + QwenFCHandler registration (upstream
+# gorilla only ships Qwen3-* handlers as of 2026-04-23).
+# Pinned at f64471b (branch: qwen-2.5-3b-handler-t4-support) which adds env-var
+# overrides for dtype / max_num_seqs / max_model_len so T4 runs work without
+# patching the installed package at runtime. See BFCL-fork commit for details.
+bfcl-eval @ git+https://github.com/arnursabet/gorilla.git@f64471b7bf7b4879c1434804f6c3bb5ff5c9bc48#subdirectory=berkeley-function-call-leaderboard
+
+# vLLM serves the model for bfcl-eval's local inference. Required by the eval harness;
+# was previously listed only under Serving because training notebooks don't touch it.
+vllm==0.15.1

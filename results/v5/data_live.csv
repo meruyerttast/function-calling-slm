@@ -1,0 +1,2 @@
+Rank,Model,Live Overall Acc,AST Summary,Python Simple AST,Python Multiple AST,Python Parallel AST,Python Parallel Multiple AST,Irrelevance Detection,Relevance Detection
+1,Qwen2.5-3B-Instruct (FC),67.65%,67.65%,66.67%,68.57%,68.75%,37.50%,64.93%,75.00%

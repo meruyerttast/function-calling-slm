@@ -1,0 +1,78 @@
+# V6: GRPO + masking + curriculum (full recipe, stretch goal).
+#
+# Tuned for short-budget GRPO (~400 steps on A100) with SFT-init from
+# arnursb/info290-v3-sft-masked. Differs from configs/grpo.yaml in:
+#   - LR raised 20x (5e-7 -> 1e-5) per TRL PEFT guidance for LoRA finetunes
+#   - num_generations 4 -> 8 for within-group reward variance
+#   - scale_rewards: false (Dr. GRPO recommendation, arxiv 2503.20783)
+#   - loss_type: dr_grpo (eliminates length bias of vanilla GRPO)
+#   - constant_with_warmup schedule (no decay) since 400 steps is short
+#   - mask_truncated_completions to keep cut-off generations out of the loss
+#   - beta=0.04 KL kept (V6 has SFT-init; cold-start variants use 0.0)
+#
+# Curriculum ordering is encoded in the JSONL itself (pre-sorted by
+# difficulty via `python -m src.data.curriculum`); pass it as --data:
+#
+#   python -m src.training.grpo \
+#     --config configs/grpo_curriculum.yaml \
+#     --data data/processed/xlam_4k_masked_curriculum_formatted.jsonl \
+#     --run-name v6 --hf-repo-id arnursb/info290-v6-grpo-curriculum \
+#     --init-adapter arnursb/info290-v3-sft-masked --max-steps 400
+#
+# Note: TRL's default dataloader shuffles. Curriculum order is per-epoch
+# sort rather than a true single-pass curriculum until dataloader_shuffle
+# is wired through (issue follow-up #3).
+
+model:
+  name: "Qwen/Qwen2.5-3B-Instruct"
+  torch_dtype: "bfloat16"
+  attn_implementation: "sdpa"
+
+quantization:
+  load_in_4bit: true
+  bnb_4bit_compute_dtype: "bfloat16"
+  bnb_4bit_quant_type: "nf4"
+
+lora:
+  rank: 64
+  alpha: 128
+  dropout: 0.05
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj
+
+grpo:
+  num_generations: 8
+  generation_batch_size: 8
+  max_completion_length: 512
+  beta: 0.04
+  loss_type: "dr_grpo"
+  scale_rewards: false
+  temperature: 0.7
+  mask_truncated_completions: true
+
+training:
+  learning_rate: 1.0e-5
+  num_train_epochs: 1
+  per_device_train_batch_size: 1
+  gradient_accumulation_steps: 4
+  warmup_ratio: 0.03
+  lr_scheduler_type: "constant_with_warmup"
+  weight_decay: 0.01
+  max_grad_norm: 1.0
+  bf16: true
+  fp16: false
+  gradient_checkpointing: true
+  logging_steps: 10
+  save_steps: 100
+
+logging:
+  report_to: "wandb"
+  wandb_project: "info290-function-calling-slm"
+
+output_dir: "checkpoints/grpo/v6"

@@ -1,0 +1,52 @@
+# BFCL V4 evaluation configuration (Issue #5).
+# Drives src/evaluation/bfcl.py, which shells out to the official bfcl-eval CLI.
+# Generation settings are milestone-locked; do not change without a report erratum.
+
+model:
+  name: "Qwen/Qwen2.5-3B-Instruct"
+  # Upstream model id as registered in arnursabet/gorilla@qwen-2.5-3b-handler.
+  # The FC suffix selects QwenFCHandler (tool_call-aware decoder).
+  bfcl_model_id: "Qwen/Qwen2.5-3B-Instruct-FC"
+  # Optional: path to a PEFT adapter directory. Null runs the base model.
+  # CLI --adapter overrides this.
+  adapter_path: null
+
+lora:
+  enable: false
+  max_rank: 64
+  # BFCL upstream requires --max-lora-rank to be >= the adapter's actual rank.
+  # Our adapters are rank 64 (configs/grpo.yaml, configs/sft.yaml).
+
+generation:
+  temperature: 0.0
+  top_p: 1.0
+  max_tokens: 512
+  backend: "vllm"
+  # Only vllm supports --enable-lora upstream. The sglang and hf backends
+  # do not honor --lora-modules.
+
+bfcl:
+  version_pin: "2026.3.23"
+  test_categories: ["all"]
+  # Accepts: all, agentic, non_live, live, multi_turn, hallucination,
+  # or any upstream sub-category id.
+  result_dir_template: "results/{variant}/generation"
+  score_dir_template: "results/{variant}"
+  # --limit value for smoke tests. Null means full dataset.
+  limit: null
+
+weights:
+  # V4 top-level weights per https://gorilla.cs.berkeley.edu/leaderboard.html
+  # (retrieved 2026-04-23). Sum must equal 1.0.
+  agentic: 0.4
+  multi_turn: 0.3
+  live: 0.1
+  non_live: 0.1
+  hallucination: 0.1
+
+logging:
+  # Eval is a snapshot, not a training loop. W&B is off by default.
+  report_to: null
+  wandb_project: "info290-function-calling-slm"
+
+output_dir: "results"

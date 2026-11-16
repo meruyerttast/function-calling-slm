@@ -1,0 +1,83 @@
+name: PR Auto Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review, reopened]
+
+jobs:
+  pr-review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run review action
+        id: pr-review
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ github.token }}
+          claude_args: >-
+            --allowedTools "Bash(gh:*)" "Bash(git:*)" "Write" "Read" "Glob" "Grep"
+          prompt: |
+            Review pull request #${{ github.event.pull_request.number }}.
+
+            ## Step 1: Understand the project
+
+            This is a research project building a Sub-3B function-calling SLM.
+            Read these files to build context before reviewing any code:
+
+            - proposal.md - the full project proposal (goals, experimental design, six system variants, evaluation plan)
+            - README.md - project structure, data pipeline, tech stack
+
+            Then read the linked GitHub issue:
+            - Run `gh pr view ${{ github.event.pull_request.number }} --json body` to find the linked issue number (look for "Closes #N")
+            - Run `gh issue view <N>` to read the full issue with requirements and acceptance criteria
+
+            Also scan the open issues for broader context:
+            - Run `gh issue list --limit 15` to see where this PR fits in the project roadmap
+
+            ## Step 2: Understand the change
+
+            - Run `gh pr view ${{ github.event.pull_request.number }}` for the PR title and description
+            - Run `gh pr diff ${{ github.event.pull_request.number }}` for the diff
+            - Read the full changed files, not just the diff
+            - Read neighboring files in the same directory to understand existing patterns (naming, error handling, module structure, docstrings, CLI conventions)
+
+            ## Step 3: Review
+
+            With full project context, evaluate the PR for:
+
+            - **Correctness**: Will this code produce correct results? Logic errors, off-by-one, wrong types?
+            - **Consistency**: Does it follow conventions from neighboring code? Same argparse patterns, same JSON handling, same directory creation, same print format?
+            - **Completeness**: Does it fully address the linked issue requirements? Any gaps in the spec?
+            - **Edge cases**: What inputs break this? Empty lists, missing keys, malformed data, unexpected types in the xLAM dataset?
+            - **Integration**: Will downstream consumers (SFT trainer, GRPO trainer, evaluation harness) be able to use this output correctly? Check the output format against what other issues/code expect.
+
+            Do NOT flag:
+            - Style nitpicks or formatting preferences
+            - Issues you're not confident about - false positives waste time
+            - Suggestions for features not in the linked issue
+
+            ## Step 4: Post
+
+            Write your review to /tmp/review.md, then post:
+            ```
+            gh pr comment ${{ github.event.pull_request.number }} --body-file /tmp/review.md
+            ```
+
+            Format:
+            - 1-2 sentence summary of what the PR does and overall assessment
+            - Bugs/issues as ### headers with code snippets and suggested fixes
+            - A "Looks good" section noting things done well
+            - If the code is clean, keep the review short
+
+            IMPORTANT: You MUST post using --body-file, not --body.

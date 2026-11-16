@@ -1,0 +1,51 @@
+node_modules/
+.venv/
+.DS_Store
+*.pyc
+__pycache__/
+.env
+wandb/
+outputs/
+checkpoints/
+*.pt
+*.bin
+*.safetensors
+
+# Evaluation artifacts: commit the canonical scores.json per variant,
+# ignore the raw upstream dumps that are large and regeneratable.
+results/*/generation/
+results/*/bfcl_raw_scores.json
+results/*/diagnostics/
+
+# Data files (tracked by DVC, not git)
+data/raw/*.json
+data/processed/*.json
+data/processed/*.jsonl
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+
+# LaTeX build artifacts
+*.aux
+*.log
+*.out
+*.toc
+*.nav
+*.snm
+*.vrb
+slides/slides.pdf
+
+# Local-only files (not for the shared repo)
+proposal-slides/
+poster/
+docs/plans/
+docs/research/
+docs/internal/
+docs/concepts-guide.*
+docs/team-runbook.md
+docs/report.*
+docs/milestone.*
+AGENTS.md
+CLAUDE.md
+.claude/
+.gitnexus
+.worktrees
